@@ -15,18 +15,41 @@
 
 #include "HID-Project.h"
 
-const int pinLed = LED_BUILTIN;
-const int pinButtonClick = 2;
-const int pinButtonMove = 3;
-const int pinButtonScroll = 4;
-bool isExe = false;
+#define HORIZ_POS_ADJ     (1920)
+#define VERT_POS_ADJ      (1760)
+#define BTN_POS_DIFF      (720)
+#define MOUSE_MOVE_ITR    (5)
+#define PIN_BTN_LANG_1ST  (2)
+#define PIN_BTN_LANG_2ND  (3)
+#define PIN_BTN_LANG_3RD  (4)
+
+typedef enum TAG_BTN_NAME
+{
+  LANG_1ST,
+  LANG_2ND,
+  LANG_3RD,
+  LANG_MAX
+}btn_name_t;
+
+void MouseMoveAndClick(btn_name_t btn_no)
+{
+  AbsoluteMouse.moveTo(SHRT_MAX - HORIZ_POS_ADJ,
+                        VERT_POS_ADJ + btn_no * BTN_POS_DIFF);
+  for(int i=0;i<MOUSE_MOVE_ITR;i++)
+  {
+    Mouse.move(SCHAR_MAX, 0);
+  }
+  Mouse.click();
+
+  return;
+}
 
 void setup() {
   // Prepare led + buttons
-  pinMode(pinLed, OUTPUT);
-  pinMode(pinButtonClick, INPUT_PULLUP);
-  pinMode(pinButtonMove, INPUT_PULLUP);
-  pinMode(pinButtonScroll, INPUT_PULLUP);
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_BTN_LANG_1ST, INPUT_PULLUP);
+  pinMode(PIN_BTN_LANG_2ND, INPUT_PULLUP);
+  pinMode(PIN_BTN_LANG_3RD, INPUT_PULLUP);
   
   // Sends a clean report to the host. This is important on any Arduino type.
   AbsoluteMouse.begin();
@@ -36,84 +59,30 @@ void setup() {
 }
 
 void loop() {
-  for(int i=0;i<2 && !isExe;i++)
-  {
-    AbsoluteMouse.moveTo(SHRT_MAX-1920, 1760);
-    for(int i=0;i<5;i++)
-    {
-      Mouse.move(127, 0);
-    }
-    Mouse.click();
-    delay(5000);
-    AbsoluteMouse.moveTo(SHRT_MAX-1920, 1760+720);
-    for(int i=0;i<5;i++)
-    {
-      Mouse.move(127, 0);
-    }
-    Mouse.click();
-    delay(5000);
-    AbsoluteMouse.moveTo(SHRT_MAX-1920, 1760+720+720);
-    for(int i=0;i<5;i++)
-    {
-      Mouse.move(127, 0);
-    }
-    Mouse.click();
-    delay(5000);
-  }
-  isExe = true;
-  if (!digitalRead(pinButtonClick)) {
-    digitalWrite(pinLed, HIGH);
-    AbsoluteMouse.moveTo(32767-1920, 1760);
-    for(int i=0;i<5;i++)
-    {
-      Mouse.move(127, 0);
-    }
-    Mouse.click();
-#if 0
-    // Same use as the official library, pretty much self explaining
-    Mouse.click();
-    //Mouse.click(MOUSE_RIGHT);
+  if (!digitalRead(PIN_BTN_LANG_1ST)) {
+    digitalWrite(PIN_LED, HIGH);
+    MouseMoveAndClick(LANG_1ST);
 
     // Simple debounce
     delay(300);
-    digitalWrite(pinLed, LOW);
-#endif
+    digitalWrite(PIN_LED, LOW);
   }
 
-  if (!digitalRead(pinButtonMove)) {
-    digitalWrite(pinLed, HIGH);
-    AbsoluteMouse.moveTo(32767-1920, 1760+720);
-    for(int i=0;i<5;i++)
-    {
-      Mouse.move(127, 0);
-    }
-    Mouse.click();
-#if 0
-    // Same use as the official library, pretty much self explaining
-    for(int i=0;i<8;i++)
-      Mouse.move(127, 0);
+  if (!digitalRead(PIN_BTN_LANG_2ND)) {
+    digitalWrite(PIN_LED, HIGH);
+    MouseMoveAndClick(LANG_2ND);
 
     // Simple debounce
     delay(300);
-    digitalWrite(pinLed, LOW);
-#endif
+    digitalWrite(PIN_LED, LOW);
   }
 
-  if (!digitalRead(pinButtonScroll)) {
-    digitalWrite(pinLed, HIGH);
-    AbsoluteMouse.moveTo(32767-1920, 1760+720+720);
-    for(int i=0;i<5;i++)
-    {
-      Mouse.move(127, 0);
-    }
-    Mouse.click();
-#if 0
-    // Scroll down a bit, make sure the value is high enough
-    Mouse.move(0, 0, 160);
+  if (!digitalRead(PIN_BTN_LANG_3RD)) {
+    digitalWrite(PIN_LED, HIGH);
+    MouseMoveAndClick(LANG_3RD);
 
     // simple debounce
     delay(300);
-    digitalWrite(pinLed, LOW);
-#endif
+    digitalWrite(PIN_LED, LOW);
   }
 }
