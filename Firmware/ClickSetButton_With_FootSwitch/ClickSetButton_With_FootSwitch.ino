@@ -15,47 +15,37 @@
 
 #include "HID-Project.h"
 
-#define HORIZ_POS_ADJ           (1920)
-#define VERT_POS_ADJ            (1760)
-#define BTN_POS_DIFF            (720)
-#define MOUSE_MOVE_ITR          (5)
+#define HORIZ_POS_ADJ   (1920)
+#define VERT_POS_ADJ    (1760)
+#define BTN_POS_DIFF    (720)
+#define MOUSE_MOVE_ITR  (5)
+#define DAMPER_PEDAL_OPEN       (261)
+#define DAMPER_PEDAL_CLOSE      (800)
+#define SOSTENUTO_PEDAL_OPEN    (1023)
+#define SOSTENUTO_PEDAL_CLOSE   (530)
+#define SOFT_PEDAL_OPEN         SOSTENUTO_PEDAL_OPEN
+#define SOFT_PEDAL_CLOSE        SOSTENUTO_PEDAL_CLOSE
 #define PIN_IN_DAMPER_PEDAL     (1)
 #define PIN_IN_SOSTENUTO_PEDAL  (2)
 #define PIN_IN_SOFT_PEDAL       (3)
-#define PIN_BTN_LANG_1ST        (4)
-#define PIN_BTN_LANG_2ND        (5)
-#define PIN_BTN_LANG_3RD        (6)
 
-typedef enum TAG_BTN_NAME
+typedef enum TAG_BUTTON_NAME
 {
   LANG_1ST,
   LANG_2ND,
   LANG_3RD,
   LANG_MAX
-}btn_name_t;
+}button_number_t;
 
-void MouseMoveAndClick(btn_name_t btn_no)
+void MouseMoveAndClick(button_number_t kButtonNumber);
+
+void setup()
 {
-  AbsoluteMouse.moveTo(SHRT_MAX - HORIZ_POS_ADJ,
-                        VERT_POS_ADJ + btn_no * BTN_POS_DIFF);
-  for(int i=0;i<MOUSE_MOVE_ITR;i++)
-  {
-    Mouse.move(SCHAR_MAX, 0);
-  }
-  Mouse.click();
-
-  return;
-}
-
-void setup() {
   // Prepare led + buttons
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_IN_DAMPER_PEDAL, INPUT);
   pinMode(PIN_IN_SOSTENUTO_PEDAL, INPUT);
   pinMode(PIN_IN_SOFT_PEDAL, INPUT);
-  pinMode(PIN_BTN_LANG_1ST, INPUT_PULLUP);
-  pinMode(PIN_BTN_LANG_2ND, INPUT_PULLUP);
-  pinMode(PIN_BTN_LANG_3RD, INPUT_PULLUP);
   
   Serial.begin(115200);
   analogReadResolution(10);
@@ -67,40 +57,69 @@ void setup() {
   Mouse.begin();
 }
 
-void loop() {
-  int valAnalogInDamperPedal = analogRead(PIN_IN_DAMPER_PEDAL);
-  int valAnalogInSostenutoPedal = analogRead(PIN_IN_SOSTENUTO_PEDAL);
-  int valAnalogInSoftPedal = analogRead(PIN_IN_SOFT_PEDAL);
+void loop()
+{
+  static bool IsUnpushedDamperPedal = false;
+  static bool IsUnpushedSostenutoPedal = false;
+  static bool IsUnpushedSoftPedal = false;
+  static int16_t PrevValDamperPedal = DAMPER_PEDAL_OPEN;
+  static int16_t PrevValSostenutoPedal = SOSTENUTO_PEDAL_OPEN;
+  static int16_t PrevValSoftPedal = SOFT_PEDAL_OPEN;
 
-  Serial.println("Damper(A1)\tSostenuto(A2)\tSoft(A3)");
-  Serial.print(valAnalogInDamperPedal);Serial.print("\t");
-  Serial.print(valAnalogInSostenutoPedal);Serial.print("\t");
-  Serial.print(valAnalogInSoftPedal);Serial.println("");
-  delay(500);
-  if (!digitalRead(PIN_BTN_LANG_1ST)) {
+  int16_t ValDamperPedal = analogRead(PIN_IN_DAMPER_PEDAL);
+  int16_t ValSostenutoPedal = analogRead(PIN_IN_SOSTENUTO_PEDAL);
+  int16_t ValSoftPedal = analogRead(PIN_IN_SOFT_PEDAL);
+
+  Serial.print("Damper: ");Serial.println(ValDamperPedal);
+  Serial.print("Sostenuto: ");Serial.println(ValSostenutoPedal);
+  Serial.print("Soft: ");Serial.println(ValSoftPedal);
+
+  if(ValDamperPedal < DAMPER_PEDAL_OPEN)
+  {
+    IsUnpushedDamperPedal = true;
+  }
+  else if(IsUnpushedDamperPedal && (ValDamperPedal > DAMPER_PEDAL_CLOSE))
+  {
+    IsUnpushedDamperPedal = false;
     digitalWrite(PIN_LED, HIGH);
     MouseMoveAndClick(LANG_1ST);
-
-    // Simple debounce
-    delay(300);
     digitalWrite(PIN_LED, LOW);
   }
 
-  if (!digitalRead(PIN_BTN_LANG_2ND)) {
-    digitalWrite(PIN_LED, HIGH);
+  if(ValSostenutoPedal >= SOSTENUTO_PEDAL_OPEN)
+  {
+    IsUnpushedSostenutoPedal = true;
+  }
+  else if(IsUnpushedSostenutoPedal && (ValSostenutoPedal < SOSTENUTO_PEDAL_CLOSE))
+  {
+    IsUnpushedSostenutoPedal = false;
+    digitalWrite(PIN_LED2, HIGH);
     MouseMoveAndClick(LANG_2ND);
-
-    // Simple debounce
-    delay(300);
-    digitalWrite(PIN_LED, LOW);
+    digitalWrite(PIN_LED2, LOW);
   }
 
-  if (!digitalRead(PIN_BTN_LANG_3RD)) {
-    digitalWrite(PIN_LED, HIGH);
+  if(ValSoftPedal >= SOFT_PEDAL_OPEN)
+  {
+    IsUnpushedSoftPedal = true;
+  }
+  else if(IsUnpushedSoftPedal && (ValSoftPedal < SOFT_PEDAL_CLOSE))
+  {
+    IsUnpushedSoftPedal = false;
+    digitalWrite(PIN_LED3, HIGH);
     MouseMoveAndClick(LANG_3RD);
-
-    // simple debounce
-    delay(300);
-    digitalWrite(PIN_LED, LOW);
+    digitalWrite(PIN_LED3, LOW);
   }
+}
+
+void MouseMoveAndClick(button_number_t kButtonNumber)
+{
+  AbsoluteMouse.moveTo(SHRT_MAX - HORIZ_POS_ADJ,
+                        VERT_POS_ADJ + kButtonNumber * BTN_POS_DIFF);
+  for(int i = 0; i < MOUSE_MOVE_ITR; i++)
+  {
+    Mouse.move(SCHAR_MAX, 0);
+  }
+  Mouse.click();
+
+  return;
 }
