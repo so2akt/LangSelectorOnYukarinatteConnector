@@ -29,11 +29,12 @@
 #define PIN_IN_SOSTENUTO_PEDAL  (2)
 #define PIN_IN_SOFT_PEDAL       (3)
 
+// buttons name on Yukarinette Connector Voice Recognition Window
 typedef enum TAG_BUTTON_NAME
 {
-  LANG_1ST,
-  LANG_2ND,
-  LANG_3RD,
+  LANG_1ST,   // 1st language: Japanese (default)
+  LANG_2ND,   // 2nd language: English US (default)
+  LANG_3RD,   // 3rd language: Chinese Mainland (default)
   LANG_MAX
 }button_number_t;
 
@@ -47,7 +48,7 @@ void setup()
   pinMode(PIN_IN_SOSTENUTO_PEDAL, INPUT);
   pinMode(PIN_IN_SOFT_PEDAL, INPUT);
   
-  Serial.begin(115200);
+  SerialUSB.begin(115200);
   analogReadResolution(10);
 
   // Sends a clean report to the host. This is important on any Arduino type.
@@ -62,17 +63,14 @@ void loop()
   static bool IsUnpushedDamperPedal = false;
   static bool IsUnpushedSostenutoPedal = false;
   static bool IsUnpushedSoftPedal = false;
-  static int16_t PrevValDamperPedal = DAMPER_PEDAL_OPEN;
-  static int16_t PrevValSostenutoPedal = SOSTENUTO_PEDAL_OPEN;
-  static int16_t PrevValSoftPedal = SOFT_PEDAL_OPEN;
 
   int16_t ValDamperPedal = analogRead(PIN_IN_DAMPER_PEDAL);
   int16_t ValSostenutoPedal = analogRead(PIN_IN_SOSTENUTO_PEDAL);
   int16_t ValSoftPedal = analogRead(PIN_IN_SOFT_PEDAL);
 
-  Serial.print("Damper: ");Serial.println(ValDamperPedal);
-  Serial.print("Sostenuto: ");Serial.println(ValSostenutoPedal);
-  Serial.print("Soft: ");Serial.println(ValSoftPedal);
+  SerialUSB.print("Damper: ");SerialUSB.println(ValDamperPedal);
+  SerialUSB.print("Sostenuto: ");SerialUSB.println(ValSostenutoPedal);
+  SerialUSB.print("Soft: ");SerialUSB.println(ValSoftPedal);
 
   if(ValDamperPedal < DAMPER_PEDAL_OPEN)
   {
