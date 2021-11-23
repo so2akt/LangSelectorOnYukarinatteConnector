@@ -14,7 +14,11 @@
 */
 
 #include "HID-Project.h"
+#include <TimerTC3.h>
 
+#define SERIAL_BAUDRATE (115200)
+#define TC3_INT_COUNT   (10000)  // microsecond
+#define AD_RESOLUTION   (10)
 #define HORIZ_POS_ADJ   (1920)
 #define VERT_POS_ADJ    (1760)
 #define BTN_POS_DIFF    (720)
@@ -28,6 +32,7 @@
 #define PIN_IN_DAMPER_PEDAL     (1)
 #define PIN_IN_SOSTENUTO_PEDAL  (2)
 #define PIN_IN_SOFT_PEDAL       (3)
+#define NUM_OF_DEBOUNCE_POLLING (5)
 
 // buttons name on Yukarinette Connector Voice Recognition Window
 typedef enum TAG_BUTTON_NAME
@@ -38,75 +43,144 @@ typedef enum TAG_BUTTON_NAME
   LANG_MAX
 }button_number_t;
 
+typedef enum TAG_PEDAL_NUMBER
+{
+  PEDAL_DAMPER,     // right pedal
+  PEDAL_SOSTENUTO,  // center pedal
+  PEDAL_SOFT,       // left pedal
+  PEDAL_MAX
+}pedal_number_t;
+
+typedef struct TAG_ANALOG_PEDAL
+{
+  uint32_t ulPinIndicator;       // indicator led output: ON when pedal pushed
+  uint32_t ulPinPedal;           // pedal analog input
+  uint16_t usThresholdPushed;    // pedal threshold when pedal pushed
+  uint16_t usThresholdUnpushed;  // pedal threshold when pedal unpushed
+  bool bIsPushedPoll[NUM_OF_DEBOUNCE_POLLING];  // debounce polling pattern: true when pedal pushed
+  bool bIsPushed;
+}analog_pedal_t;
+
+analog_pedal_t kPedal[PEDAL_MAX] = 
+{
+  { // damper pedal (right pedal) setting
+    PIN_LED,
+    PIN_IN_DAMPER_PEDAL,
+    DAMPER_PEDAL_CLOSE,
+    DAMPER_PEDAL_OPEN,
+    {false, false, false, false, false},
+    false
+  },
+  { // sostenuto pedal (center pedal) setting
+    PIN_LED2,
+    PIN_IN_SOSTENUTO_PEDAL,
+    SOSTENUTO_PEDAL_CLOSE,
+    SOSTENUTO_PEDAL_OPEN,
+    {false, false, false, false, false},
+    false
+  },
+  { // soft pedal (left pedal) setting
+    PIN_LED3,
+    PIN_IN_SOFT_PEDAL,
+    SOFT_PEDAL_CLOSE,
+    SOFT_PEDAL_OPEN,
+    {false, false, false, false, false},
+    false
+  }
+};
+
 void MouseMoveAndClick(button_number_t kButtonNumber);
+void vInputPoll(void);
 
 void setup()
 {
-  // Prepare led + buttons
-  pinMode(PIN_LED, OUTPUT);
-  pinMode(PIN_IN_DAMPER_PEDAL, INPUT);
-  pinMode(PIN_IN_SOSTENUTO_PEDAL, INPUT);
-  pinMode(PIN_IN_SOFT_PEDAL, INPUT);
-  
-  SerialUSB.begin(115200);
-  analogReadResolution(10);
+  SerialUSB.begin(SERIAL_BAUDRATE, SERIAL_8N1); // default SERIAL_8N1
+  while(!SerialUSB)
+  {
+    ; // wait for SerialUSB enabled
+  }
+  SerialUSB.print("serial com opened as ");
+  SerialUSB.print("baudrate: ");
+  SerialUSB.print(SERIAL_BAUDRATE);
+  SerialUSB.println(", data bit: 8, parity bit: none, stop bit: 1");
 
-  // Sends a clean report to the host. This is important on any Arduino type.
+  pinMode(kPedal[PEDAL_DAMPER].ulPinIndicator, OUTPUT);
+  SerialUSB.print("set damper pedal indicator OUTPUT #");
+  SerialUSB.println(kPedal[PEDAL_DAMPER].ulPinIndicator);
+  pinMode(kPedal[PEDAL_SOSTENUTO].ulPinIndicator, OUTPUT);
+  SerialUSB.print("set sostenuto pedal indicator OUTPUT #");
+  SerialUSB.println(kPedal[PEDAL_SOSTENUTO].ulPinIndicator);
+  pinMode(kPedal[PEDAL_SOFT].ulPinIndicator, OUTPUT);
+  SerialUSB.print("set soft pedal indicator OUTPUT #");
+  SerialUSB.println(kPedal[PEDAL_SOFT].ulPinIndicator);
+
+  pinMode(kPedal[PEDAL_DAMPER].ulPinPedal, INPUT);
+  SerialUSB.print("set damper pedal analog INPUT #");
+  SerialUSB.println(kPedal[PEDAL_DAMPER].ulPinPedal);
+  pinMode(kPedal[PEDAL_SOSTENUTO].ulPinPedal, INPUT);
+  SerialUSB.print("sostenuto pedal analog INPUT #");
+  SerialUSB.println(kPedal[PEDAL_SOSTENUTO].ulPinPedal);
+  pinMode(kPedal[PEDAL_SOFT].ulPinPedal, INPUT);
+  SerialUSB.print("soft pedal analog INPUT #");
+  SerialUSB.println(kPedal[PEDAL_SOFT].ulPinPedal);
+
+  analogReadResolution(AD_RESOLUTION);  // default 10-bit on Seeeduino XIAO
+  SerialUSB.print("set A/D converter resolution: ");
+  SerialUSB.print(AD_RESOLUTION);
+  SerialUSB.println(" bits");
+
   AbsoluteMouse.begin();
+  SerialUSB.println("absolute positioning mouse started");
   
-  // Sends a clean report to the host. This is important on any Arduino type.
   Mouse.begin();
+  SerialUSB.println("relative positioning mouse started");
+
+  TimerTc3.initialize(TC3_INT_COUNT);
+  TimerTc3.attachInterrupt(vInputPoll);
 }
 
 void loop()
 {
-  static bool IsUnpushedDamperPedal = false;
-  static bool IsUnpushedSostenutoPedal = false;
-  static bool IsUnpushedSoftPedal = false;
+  static bool DoesKeepPushingDamperPedal = false;
+  static bool DoesKeepPushingSostenutoPedal = false;
+  static bool DoesKeepPushingSoftPedal = false;
 
-  int16_t ValDamperPedal = analogRead(PIN_IN_DAMPER_PEDAL);
-  int16_t ValSostenutoPedal = analogRead(PIN_IN_SOSTENUTO_PEDAL);
-  int16_t ValSoftPedal = analogRead(PIN_IN_SOFT_PEDAL);
-
-  SerialUSB.print("Damper: ");SerialUSB.println(ValDamperPedal);
-  SerialUSB.print("Sostenuto: ");SerialUSB.println(ValSostenutoPedal);
-  SerialUSB.print("Soft: ");SerialUSB.println(ValSoftPedal);
-
-  if(ValDamperPedal < DAMPER_PEDAL_OPEN)
+  if ((!DoesKeepPushingDamperPedal) && (kPedal[PEDAL_DAMPER].bIsPushed))
   {
-    IsUnpushedDamperPedal = true;
-  }
-  else if(IsUnpushedDamperPedal && (ValDamperPedal > DAMPER_PEDAL_CLOSE))
-  {
-    IsUnpushedDamperPedal = false;
+    DoesKeepPushingDamperPedal = true;
     digitalWrite(PIN_LED, HIGH);
     MouseMoveAndClick(LANG_1ST);
     digitalWrite(PIN_LED, LOW);
   }
-
-  if(ValSostenutoPedal >= SOSTENUTO_PEDAL_OPEN)
+  else if (!kPedal[PEDAL_DAMPER].bIsPushed)
   {
-    IsUnpushedSostenutoPedal = true;
+    DoesKeepPushingDamperPedal = false;
   }
-  else if(IsUnpushedSostenutoPedal && (ValSostenutoPedal < SOSTENUTO_PEDAL_CLOSE))
+
+  if ((!DoesKeepPushingSostenutoPedal) && (kPedal[PEDAL_SOSTENUTO].bIsPushed))
   {
-    IsUnpushedSostenutoPedal = false;
-    digitalWrite(PIN_LED2, HIGH);
+    DoesKeepPushingSostenutoPedal = true;
+    digitalWrite(PIN_LED, HIGH);
     MouseMoveAndClick(LANG_2ND);
-    digitalWrite(PIN_LED2, LOW);
+    digitalWrite(PIN_LED, LOW);
+  }
+  else if (!kPedal[PEDAL_SOSTENUTO].bIsPushed)
+  {
+    DoesKeepPushingSostenutoPedal = false;
   }
 
-  if(ValSoftPedal >= SOFT_PEDAL_OPEN)
+  if ((!DoesKeepPushingSoftPedal) && (kPedal[PEDAL_SOFT].bIsPushed))
   {
-    IsUnpushedSoftPedal = true;
-  }
-  else if(IsUnpushedSoftPedal && (ValSoftPedal < SOFT_PEDAL_CLOSE))
-  {
-    IsUnpushedSoftPedal = false;
-    digitalWrite(PIN_LED3, HIGH);
+    DoesKeepPushingSoftPedal = true;
+    digitalWrite(PIN_LED, HIGH);
     MouseMoveAndClick(LANG_3RD);
-    digitalWrite(PIN_LED3, LOW);
+    digitalWrite(PIN_LED, LOW);
   }
+  else if (!kPedal[PEDAL_SOFT].bIsPushed)
+  {
+    DoesKeepPushingSoftPedal = false;
+  }
+
 }
 
 void MouseMoveAndClick(button_number_t kButtonNumber)
@@ -118,6 +192,33 @@ void MouseMoveAndClick(button_number_t kButtonNumber)
     Mouse.move(SCHAR_MAX, 0);
   }
   Mouse.click();
+
+  return;
+}
+
+void vInputPoll(void)
+{
+  static int PollCount = 0;
+
+  kPedal[PEDAL_DAMPER].bIsPushedPoll[PollCount]
+    = (analogRead(kPedal[PEDAL_DAMPER].ulPinPedal) >= kPedal[PEDAL_DAMPER].usThresholdPushed) ? true : false;
+  kPedal[PEDAL_DAMPER].bIsPushed
+    = (kPedal[PEDAL_DAMPER].bIsPushedPoll[0]) & (kPedal[PEDAL_DAMPER].bIsPushedPoll[1])
+      & (kPedal[PEDAL_DAMPER].bIsPushedPoll[2]) & (kPedal[PEDAL_DAMPER].bIsPushedPoll[3]);
+
+  kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[PollCount]
+    = (analogRead(kPedal[PEDAL_SOSTENUTO].ulPinPedal) < kPedal[PEDAL_SOSTENUTO].usThresholdPushed) ? true : false;
+  kPedal[PEDAL_SOSTENUTO].bIsPushed
+    = (kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[0]) & (kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[1])
+      & (kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[2]) & (kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[3]);
+
+  kPedal[PEDAL_SOFT].bIsPushedPoll[PollCount]
+    = (analogRead(kPedal[PEDAL_SOFT].ulPinPedal) < kPedal[PEDAL_SOFT].usThresholdPushed) ? true : false;
+  kPedal[PEDAL_SOFT].bIsPushed
+    = (kPedal[PEDAL_SOFT].bIsPushedPoll[0]) & (kPedal[PEDAL_SOFT].bIsPushedPoll[1])
+      & (kPedal[PEDAL_SOFT].bIsPushedPoll[2]) & (kPedal[PEDAL_SOFT].bIsPushedPoll[3]);
+
+  PollCount = (PollCount + 1) % NUM_OF_DEBOUNCE_POLLING;
 
   return;
 }
