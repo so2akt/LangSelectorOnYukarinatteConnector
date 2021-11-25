@@ -55,7 +55,7 @@ typedef enum TAG_PEDAL_NUMBER
 
 typedef enum TAG_PEDAL_COND
 {
-  PEDAL_COND_UNPUSHED,      // unpushed
+  PEDAL_COND_UNPUSHED,      // unpushed or continuing pushed after pushed
   PEDAL_COND_DETECT_PUSHED, // detect pushed edge
   PEDAL_COND_PUSHED,        // pushed
   PEDAL_COND_MAX
@@ -68,7 +68,8 @@ typedef struct TAG_ANALOG_PEDAL
   uint16_t usThresholdPushed;     // pedal threshold when pedal pushed
   uint16_t usThresholdUnpushed;   // pedal threshold when pedal unpushed
   bool bIsPushedPoll[NUM_OF_POLLING];  // debounce polling pattern: true when pedal pushed
-  pedal_cond_t kPedalCond;        // pedal condition 
+  pedal_cond_t kPedalCond;        // pedal condition
+  uint8_t ucPushedCount;          // number of pushed
 }analog_pedal_t;
 
 analog_pedal_t kPedal[PEDAL_MAX] = 
@@ -79,7 +80,8 @@ analog_pedal_t kPedal[PEDAL_MAX] =
     DAMPER_PEDAL_CLOSE,
     DAMPER_PEDAL_OPEN,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
-    PEDAL_COND_UNPUSHED
+    PEDAL_COND_UNPUSHED,
+    0
   },
   { // sostenuto pedal (middle pedal) setting
     PIN_LED2,
@@ -87,7 +89,8 @@ analog_pedal_t kPedal[PEDAL_MAX] =
     SOSTENUTO_PEDAL_CLOSE,
     SOSTENUTO_PEDAL_OPEN,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
-    PEDAL_COND_UNPUSHED
+    PEDAL_COND_UNPUSHED,
+    0
   },
   { // soft pedal (left pedal) setting
     PIN_LED3,
@@ -95,7 +98,8 @@ analog_pedal_t kPedal[PEDAL_MAX] =
     SOFT_PEDAL_CLOSE,
     SOFT_PEDAL_OPEN,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
-    PEDAL_COND_UNPUSHED
+    PEDAL_COND_UNPUSHED,
+    0
   }
 };
 
@@ -170,7 +174,6 @@ void MouseMoveAndClick(button_number_t kButtonNumber)
 void vInputPoll(void)
 {
   static uint8_t ucPollCount = 0;
-  static uint8_t s_ucPushedCont[PEDAL_MAX] = {0, 0, 0};
   uint8_t ucPollCountPrev = (ucPollCount + NUM_OF_POLLING - 1) % NUM_OF_POLLING;
 
   kPedal[PEDAL_DAMPER].bIsPushedPoll[ucPollCount]
@@ -182,13 +185,13 @@ void vInputPoll(void)
         && (kPedal[PEDAL_DAMPER].bIsPushedPoll[ucPollCount]))
       {
         kPedal[PEDAL_DAMPER].kPedalCond = PEDAL_COND_DETECT_PUSHED;
-        s_ucPushedCont[PEDAL_DAMPER] = 1;
+        kPedal[PEDAL_DAMPER].ucPushedCount = 1;
       }
       break;
     case PEDAL_COND_DETECT_PUSHED:
       if (kPedal[PEDAL_DAMPER].bIsPushedPoll[ucPollCount])
       {
-        if (NUM_OF_DEBOUNCE == ++s_ucPushedCont[PEDAL_DAMPER])
+        if (NUM_OF_DEBOUNCE == ++kPedal[PEDAL_DAMPER].ucPushedCount)
         {
           kPedal[PEDAL_DAMPER].kPedalCond = PEDAL_COND_PUSHED;
         }
@@ -204,7 +207,7 @@ void vInputPoll(void)
       digitalWrite(PIN_LED2, LOW);
     default:
       kPedal[PEDAL_DAMPER].kPedalCond = PEDAL_COND_UNPUSHED;
-      s_ucPushedCont[PEDAL_DAMPER] = 0;
+      kPedal[PEDAL_DAMPER].ucPushedCount = 0;
       break;
   }
 
@@ -217,13 +220,13 @@ void vInputPoll(void)
         && (kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[ucPollCount]))
       {
         kPedal[PEDAL_SOSTENUTO].kPedalCond = PEDAL_COND_DETECT_PUSHED;
-        s_ucPushedCont[PEDAL_SOSTENUTO] = 1;
+        kPedal[PEDAL_SOSTENUTO].ucPushedCount = 1;
       }
       break;
     case PEDAL_COND_DETECT_PUSHED:
       if (kPedal[PEDAL_SOSTENUTO].bIsPushedPoll[ucPollCount])
       {
-        if (NUM_OF_DEBOUNCE == ++s_ucPushedCont[PEDAL_SOSTENUTO])
+        if (NUM_OF_DEBOUNCE == ++kPedal[PEDAL_SOSTENUTO].ucPushedCount)
         {
           kPedal[PEDAL_SOSTENUTO].kPedalCond = PEDAL_COND_PUSHED;
         }
@@ -239,7 +242,7 @@ void vInputPoll(void)
       digitalWrite(PIN_LED3, LOW);
     default:
       kPedal[PEDAL_SOSTENUTO].kPedalCond = PEDAL_COND_UNPUSHED;
-      s_ucPushedCont[PEDAL_SOSTENUTO] = 0;
+      kPedal[PEDAL_SOSTENUTO].ucPushedCount = 0;
       break;
   }
 
@@ -252,13 +255,13 @@ void vInputPoll(void)
         && (kPedal[PEDAL_SOFT].bIsPushedPoll[ucPollCount]))
       {
         kPedal[PEDAL_SOFT].kPedalCond = PEDAL_COND_DETECT_PUSHED;
-        s_ucPushedCont[PEDAL_SOFT] = 1;
+        kPedal[PEDAL_SOFT].ucPushedCount = 1;
       }
       break;
     case PEDAL_COND_DETECT_PUSHED:
       if (kPedal[PEDAL_SOFT].bIsPushedPoll[ucPollCount])
       {
-        if (NUM_OF_DEBOUNCE == ++s_ucPushedCont[PEDAL_SOFT])
+        if (NUM_OF_DEBOUNCE == ++kPedal[PEDAL_SOFT].ucPushedCount)
         {
           kPedal[PEDAL_SOFT].kPedalCond = PEDAL_COND_PUSHED;
         }
@@ -274,7 +277,7 @@ void vInputPoll(void)
       digitalWrite(PIN_LED, LOW);
     default:
       kPedal[PEDAL_SOFT].kPedalCond = PEDAL_COND_UNPUSHED;
-      s_ucPushedCont[PEDAL_SOFT] = 0;
+      kPedal[PEDAL_SOFT].ucPushedCount = 0;
       break;
   }
 
