@@ -55,8 +55,8 @@ typedef enum TAG_PEDAL_NUMBER
 
 typedef enum TAG_PEDAL_COND
 {
-  PEDAL_COND_UNPUSHED,      // unpushed or continuing pushed after pushed
-  PEDAL_COND_DETECT_PUSHED, // detect pushed edge
+  PEDAL_COND_DONT_CARE,     // unpushed or continuing pushed
+  PEDAL_COND_PUSHED_EDGE,   // detect pushed edge
   PEDAL_COND_PUSHED,        // pushed
   PEDAL_COND_MAX
 }pedal_cond_t;
@@ -81,7 +81,7 @@ analog_pedal_t kPedal[PEDAL_MAX] =
     DAMPER_PEDAL_CLOSE,
     DAMPER_PEDAL_OPEN,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
-    PEDAL_COND_UNPUSHED,
+    PEDAL_COND_DONT_CARE,
     0,
     0
   },
@@ -91,7 +91,7 @@ analog_pedal_t kPedal[PEDAL_MAX] =
     SOSTENUTO_PEDAL_CLOSE,
     SOSTENUTO_PEDAL_OPEN,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
-    PEDAL_COND_UNPUSHED,
+    PEDAL_COND_DONT_CARE,
     0,
     0
   },
@@ -101,7 +101,7 @@ analog_pedal_t kPedal[PEDAL_MAX] =
     SOFT_PEDAL_CLOSE,
     SOFT_PEDAL_OPEN,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
-    PEDAL_COND_UNPUSHED,
+    PEDAL_COND_DONT_CARE,
     0,
     0
   }
@@ -198,15 +198,15 @@ void vPedalDiscriminant(pedal_number_t pedal_idx, button_number_t button_idx)
 
   switch (kPedal[pedal_idx].kPedalCond)
   {
-    case PEDAL_COND_UNPUSHED:
+    case PEDAL_COND_DONT_CARE:
       if ((!kPedal[pedal_idx].bIsPushedPoll[ucPollCountPrev])
         && (kPedal[pedal_idx].bIsPushedPoll[kPedal[pedal_idx].ucPollCount]))
       {
-        kPedal[pedal_idx].kPedalCond = PEDAL_COND_DETECT_PUSHED;
+        kPedal[pedal_idx].kPedalCond = PEDAL_COND_PUSHED_EDGE;
         kPedal[pedal_idx].ucPushedCount = 1;
       }
       break;
-    case PEDAL_COND_DETECT_PUSHED:
+    case PEDAL_COND_PUSHED_EDGE:
       if (kPedal[pedal_idx].bIsPushedPoll[kPedal[pedal_idx].ucPollCount])
       {
         if (NUM_OF_DEBOUNCE == ++kPedal[pedal_idx].ucPushedCount)
@@ -216,13 +216,13 @@ void vPedalDiscriminant(pedal_number_t pedal_idx, button_number_t button_idx)
       }
       else
       {
-        kPedal[pedal_idx].kPedalCond = PEDAL_COND_UNPUSHED;
+        kPedal[pedal_idx].kPedalCond = PEDAL_COND_DONT_CARE;
       }
       break;
     case PEDAL_COND_PUSHED:
       MouseMoveAndClick(button_idx);
     default:
-      kPedal[pedal_idx].kPedalCond = PEDAL_COND_UNPUSHED;
+      kPedal[pedal_idx].kPedalCond = PEDAL_COND_DONT_CARE;
       kPedal[pedal_idx].ucPushedCount = 0;
       break;
   }
