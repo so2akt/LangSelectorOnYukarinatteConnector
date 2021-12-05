@@ -23,12 +23,12 @@
 #define VERT_POS_ADJ    (1760)
 #define BTN_POS_DIFF    (720)
 #define MOUSE_MOVE_ITR  (5)
-#define DAMPER_PEDAL_OPEN       (261)
-#define DAMPER_PEDAL_CLOSE      (800)
-#define SOSTENUTO_PEDAL_OPEN    (1023)
-#define SOSTENUTO_PEDAL_CLOSE   (530)
-#define SOFT_PEDAL_OPEN         SOSTENUTO_PEDAL_OPEN
-#define SOFT_PEDAL_CLOSE        SOSTENUTO_PEDAL_CLOSE
+#define DAMPER_PEDAL_UNPUSHED     (642)
+#define DAMPER_PEDAL_PUSHED       (374)
+#define SOSTENUTO_PEDAL_UNPUSHED  (1023)
+#define SOSTENUTO_PEDAL_PUSHED    (180)
+#define SOFT_PEDAL_UNPUSHED       (1023)
+#define SOFT_PEDAL_PUSHED         (160)
 #define PIN_IN_DAMPER_PEDAL     (1)
 #define PIN_IN_SOSTENUTO_PEDAL  (2)
 #define PIN_IN_SOFT_PEDAL       (3)
@@ -78,8 +78,8 @@ analog_pedal_t kPedal[PEDAL_MAX] =
   { // damper pedal (right pedal) setting
     PIN_LED,
     PIN_IN_DAMPER_PEDAL,
-    DAMPER_PEDAL_CLOSE,
-    DAMPER_PEDAL_OPEN,
+    DAMPER_PEDAL_PUSHED,
+    DAMPER_PEDAL_UNPUSHED,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
     PEDAL_COND_DONT_CARE,
     0,
@@ -88,8 +88,8 @@ analog_pedal_t kPedal[PEDAL_MAX] =
   { // sostenuto pedal (middle pedal) setting
     PIN_LED2,
     PIN_IN_SOSTENUTO_PEDAL,
-    SOSTENUTO_PEDAL_CLOSE,
-    SOSTENUTO_PEDAL_OPEN,
+    SOSTENUTO_PEDAL_PUSHED,
+    SOSTENUTO_PEDAL_UNPUSHED,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
     PEDAL_COND_DONT_CARE,
     0,
@@ -98,8 +98,8 @@ analog_pedal_t kPedal[PEDAL_MAX] =
   { // soft pedal (left pedal) setting
     PIN_LED3,
     PIN_IN_SOFT_PEDAL,
-    SOFT_PEDAL_CLOSE,
-    SOFT_PEDAL_OPEN,
+    SOFT_PEDAL_PUSHED,
+    SOFT_PEDAL_UNPUSHED,
     {false, false, false, true},  // 4th element prevents from PUSHED detection when started with pedal pushing
     PEDAL_COND_DONT_CARE,
     0,
@@ -181,20 +181,8 @@ void vPedalDiscriminant(pedal_number_t pedal_idx, button_number_t button_idx)
   uint8_t ucPollCountPrev = (kPedal[pedal_idx].ucPollCount + NUM_OF_POLLING - 1) % NUM_OF_POLLING;
   uint32_t ulPedalVal = analogRead(kPedal[pedal_idx].ulPinPedal);
 
-  switch (pedal_idx)
-  {
-    case PEDAL_DAMPER:
-      kPedal[pedal_idx].bIsPushedPoll[kPedal[pedal_idx].ucPollCount]
-        = (ulPedalVal >= kPedal[pedal_idx].usThresholdPushed) ? true : false;
-      break;
-    case PEDAL_SOSTENUTO:
-    case PEDAL_SOFT:
-      kPedal[pedal_idx].bIsPushedPoll[kPedal[pedal_idx].ucPollCount]
-        = (ulPedalVal < kPedal[pedal_idx].usThresholdPushed) ? true : false;
-      break;
-    default:
-      break;
-  }
+  kPedal[pedal_idx].bIsPushedPoll[kPedal[pedal_idx].ucPollCount]
+    = (ulPedalVal < kPedal[pedal_idx].usThresholdPushed) ? true : false;
 
   switch (kPedal[pedal_idx].kPedalCond)
   {
